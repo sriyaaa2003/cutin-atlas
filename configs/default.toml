@@ -1,0 +1,37 @@
+# Every tunable lives here; nothing is hard-coded in src/.
+[data]
+raw_dir = "data/highd"   # highD CSVs, relative to the repo root
+out_dir = "data"
+before_s = 3.0                # window around the lane-change frame
+after_s = 3.0
+max_gap_m = 80.0              # follower must be within this bumper gap when the cutter arrives
+follower_class = "Car"
+min_speed_ms = 10.0
+
+[maneuver]                    # where the lateral movement starts and ends
+start_frac = 0.10             # the maneuver runs while lateral speed is above this share of its own peak
+min_speed_ms = 0.05           # but never below this absolute lateral speed (m/s)
+
+[replay]                      # closed-loop replay of every cut-in against an ACC + AEB system
+dt_s = 0.04
+path_offset = 0.45            # cutter counts as the ACC target once |offset| is below this (lane widths)
+overlap_offset = 0.5          # bodies overlap laterally below this offset
+aeb_ttc_s = [0.8, 1.8]
+sensor_delay_s = [0.1, 0.5]
+max_brake_ms2 = [5.0, 9.0]
+actuator_tau_s = 0.2
+sigma_gap_m = 0.4
+sigma_speed_ms = 0.15
+acc_k1 = 0.23
+acc_k2 = 0.07
+acc_time_gap_s = 1.5
+acc_standstill_m = 2.0
+acc_max_decel = 3.0
+acc_max_accel = 2.0
+acc_speed_gain = 0.4
+seed = 20261012
+
+[cluster]
+k_range = [2, 12]
+bootstrap = 100
+seed = 11
