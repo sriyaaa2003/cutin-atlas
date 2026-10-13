@@ -1,5 +1,8 @@
-data/
+data/*.parquet
+data/*.npz
+data/highd
 *.egg-info/
 __pycache__/
 .pytest_cache/
+kaggle/*.zip
 results/*.log
