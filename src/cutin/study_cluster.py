@@ -26,7 +26,7 @@ def fit_cluster(algo: str, z: np.ndarray, k: int, seed: int):
         m = KMeans(k, n_init=10, random_state=seed).fit(z)
         return m.labels_, m.predict
     if algo == "Gaussian mixture":
-        m = GaussianMixture(k, covariance_type="diag", n_init=3, random_state=seed).fit(z)
+        m = GaussianMixture(k, covariance_type="diag", n_init=3, reg_covar=1e-3, random_state=seed).fit(z)
         return m.predict(z), m.predict
     lab = AgglomerativeClustering(k, linkage="ward").fit_predict(z)
     cen = np.stack([z[lab == c].mean(0) for c in range(k)])
@@ -46,7 +46,10 @@ def choose_k(algo: str, z: np.ndarray, kr, seed: int):
         return len(ids), sil, (lambda x: ((x[:, None, :] - cen[None]) ** 2).sum(-1).argmin(1)), np.where(lab >= 0, lab, -1)
     best = None
     for k in range(kr[0], kr[1] + 1):
-        lab, assign = fit_cluster(algo, z, k, seed)
+        try:
+            lab, assign = fit_cluster(algo, z, k, seed)
+        except ValueError:                      # a degenerate component (singleton cluster): skip this k
+            continue
         if len(np.unique(lab)) < 2:
             continue
         sil = silhouette_score(z, lab)
@@ -126,7 +129,10 @@ def run(cfg: Config | None = None, splits: int = 10) -> None:
                     if algo != "HDBSCAN":
                         for b in range(10):
                             ib = rng.choice(len(ztr), len(ztr), replace=True)
-                            lb, asg = fit_cluster(algo, ztr[ib], k, b)
+                            try:
+                                lb, asg = fit_cluster(algo, ztr[ib], k, b)
+                            except ValueError:
+                                continue
                             aris.append(adjusted_rand_score(lab, asg(ztr)))
                 strata = assign(zte)
                 for name, y_all in kpis.items():

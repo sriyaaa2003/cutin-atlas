@@ -48,23 +48,24 @@ def fig_strata(res, out):
     g = pd.read_csv(res / "strata.csv")
     g = g[g.budget == 100]
     kpis = list(g.kpi.unique())
-    fig, axs = plt.subplots(1, len(kpis), figsize=(11, 3.8), sharey=False)
-    spec = {"k-means on descriptors": BLUE, "k-means on curve parameters": GREEN, "k-means on PCA of raw trajectories": GREY,
-            "regression tree on descriptors, fitted to pilot outcomes": ORANGE}
+    fig, axs = plt.subplots(1, len(kpis), figsize=(11, 3.9))
+    spec = {"k-means on descriptors": (BLUE, "k-means, scenario descriptors"),
+            "k-means on PCA of raw trajectories": (GREEN, "k-means, PCA of raw trajectories"),
+            "regression tree on descriptors, fitted to pilot outcomes": (ORANGE, "tree fitted to a pilot campaign")}
     for ax, kpi in zip(np.atleast_1d(axs), kpis):
-        for name, c in spec.items():
+        for name, (c, lab) in spec.items():
             s = g[(g.kpi == kpi) & (g.strata == name)].sort_values("k")
             if len(s):
-                ax.plot(s.k, s.eff_neyman, color=c, lw=2, marker="o", ms=5)
-        s = g[(g.kpi == kpi)]
-        ctrl = s.groupby("k").eff_control.mean()
-        ax.plot(ctrl.index, ctrl.values, color="#555", lw=1.2, ls="--")
+                ax.errorbar(s.k, s.eff_two_phase, yerr=s.eff_two_phase_sd, color=c, lw=2, marker="o", ms=5, capsize=2, label=lab)
+        ctrl = g[g.kpi == kpi].groupby("k").eff_two_phase_control.mean()
+        ax.plot(ctrl.index, ctrl.values, color="#555", lw=1.2, ls="--", label="strata with no information (shuffled)")
         ax.axhline(1.0, color=INK, lw=0.8)
         ax.set_xscale("log", base=2)
         ax.set_xlabel("number of strata", fontsize=9)
         ax.set_title(kpi, loc="left", fontsize=9.5, color=INK)
         style(ax)
-    np.atleast_1d(axs)[0].set_ylabel("simulation saving at equal precision (x)", fontsize=9)
+    np.atleast_1d(axs)[0].set_ylabel("random runs needed / stratified runs needed (x)", fontsize=9)
+    np.atleast_1d(axs)[0].legend(frameon=False, fontsize=7.5, loc="upper left")
     fig.tight_layout()
     fig.savefig(out / "strata.png", dpi=170)
 
