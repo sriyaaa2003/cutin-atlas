@@ -1,0 +1,27 @@
+{
+  "n_test": 40,
+  "sizes": [
+    8,
+    16,
+    32,
+    64,
+    128
+  ],
+  "seeds": [
+    0,
+    1
+  ],
+  "steps": 500,
+  "nodes_per_case": 780.1,
+  "fem_ms_per_case": 8.772150002187118,
+  "gnn_inference_ms_per_case": 9.425930000725202,
+  "fem_validation": {
+    "patch_test_max_error": 3.907985046680551e-14,
+    "tip_deflection_over_timoshenko": {
+      "30x6": 0.914870098869628,
+      "60x12": 0.9727286719718868,
+      "120x24": 0.9888381236536131
+    },
+    "equilibrium_max_residual_newtons": 7.192682005552342e-10
+  }
+}

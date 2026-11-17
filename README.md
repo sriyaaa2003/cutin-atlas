@@ -11,6 +11,7 @@
 | Which trajectory description keeps a cut-in test honest? | A **4-parameter tanh sigmoid**: reproduces all 11 cut-ins that end in contact and loses 1.1% of critical ones. The common fixed-shape minimum-jerk curve loses 18.8%. |
 | Where does the danger sit? | One group in nine (follower 3 m/s faster, 31 m gap): **15%** critical against at most 0.5% in every other group. |
 | How many simulations can strata save? | **4.7x** fewer runs for critical events and **9.2x** for closeness to collision, with 16 strata fitted on a pilot campaign (100 runs). Strata without information: 1x or worse. |
+| Extension: how few finite element runs does a graph network need? | A network that learns only the correction to a beam formula beats the formula from **8 runs** (displacement error 4.1% against 6.1%, stress 15.4% against 17.8%) and levels off near 3% and 11% after about 32. A network that learns the whole answer never reaches the formula (12% and 25% after 128 runs). See [the extension](#extension-how-few-finite-element-runs-does-a-graph-network-need). |
 
 ## What I did
 
@@ -59,6 +60,32 @@ Then I varied the number of strata and let a regression tree on the descriptors,
 
 Read 4.7x as: 100 runs on tree strata reach the accuracy that about 470 random runs would. Shuffled strata, which carry no information, give 1.2x or less everywhere, so the gains are not an artefact of the allocation rule. The uncertainty is large for the critical outcome (standard deviation 1.5x across splits at 16 strata).
 
+## Extension: how few finite element runs does a graph network need?
+
+The studies above ask how few expensive simulation runs are enough to answer a question about cut-ins. This extension asks the same of a **finite element (FEM) simulation**, in a deliberately small setting: a rectangular plate with a round hole, clamped on its left edge and pushed on its right edge. I wrote a 2D plane-stress FEM solver (`src/cutin/surrogate/fem.py`), generated random plates (height, hole size and position, size and direction of the load), and trained graph neural networks (`gnn.py`, plain PyTorch, no graph library) to predict the movement and the von Mises stress at every mesh node from a few FEM runs. Every model is scored on **40 plates never used for training or for design choices**. A plain-words explanation is in [`docs/surrogate-walkthrough.md`](docs/surrogate-walkthrough.md).
+
+![surrogate](results/surrogate/learning_curve.png)
+
+Relative error over the whole field on the 40 unseen plates (mean of two training seeds):
+
+| model | FEM runs | displacement | von Mises stress |
+|---|---|---|---|
+| beam formula, which does not know the hole | 0 | 6.1% | 17.8% |
+| **graph net + beam formula** (learns only the correction) | 8 / 32 / 128 | **4.1% / 3.0% / 2.8%** | **15.4% / 11.2% / 11.3%** |
+| graph net alone | 8 / 32 / 128 | 49% / 12.2% / 12.8% | 49% / 24.2% / 24.6% |
+| same inputs, no message passing | 8 / 32 / 128 | 53% / 31% / 29% | 55% / 52% / 56% |
+
+- **The simple formula is hard to beat.** Away from the hole a textbook beam is nearly exact, so a network that has to learn the whole field from a few runs does worse than the formula and never catches it, even with 128 runs.
+- **Learning only the correction works.** The correction to the formula is small and sits near the hole and the clamp, so it beats the formula from 8 runs on both fields (the physics prediction plus a learned residual, the same design as [evprior](https://github.com/sriyaaa2003/evprior)). Its peak-stress error is not better than the formula's (7% to 11% against 6.1%).
+- **The curve is flat after about 32 runs.** More runs do not help, so the limit here is the network and its 500 training steps, not the amount of data.
+- **Message passing matters, once there is enough data.** With 8 runs both networks fail (about 50% error); from 32 runs on, the same network without message passing is about 2x to 2.5x worse than the graph net alone, and about 10x worse than the graph net with the beam formula.
+- **It is not faster.** One FEM solve takes about 8.8 ms and one network prediction about 9.4 ms on this CPU, so this study is about how much data a surrogate needs, not about speed. A surrogate only pays off when the simulation takes minutes or hours.
+- **The solver was checked against exact answers:** the patch test is exact to 4e-14, the clamp reactions balance the load to 7e-10 N, and the tip deflection approaches the Timoshenko beam value (91.5%, 97.3%, 98.9% of it on 30x6, 60x12 and 120x24 meshes).
+
+How the design was chosen: the first version did not learn (displacement error near 100%), because only the loaded edge knew the load and six rounds of message passing cannot carry it across the plate. I then predicted results *per newton* (exact, because the FEM is linear), gave every node the load direction, and added the residual model, all after a 10-plate smoke test on a different seed. Sizes and settings (32 hidden units, 6 rounds, 500 steps) were fixed before the final run and not tuned on the test plates.
+
+Limits of the extension: two dimensions, linear elasticity, constant-strain triangles (slightly stiff in bending), a staircase hole, a self-written solver, 40 test plates and two seeds (the plotted bands are the range across seeds, not confidence intervals), and a CPU-only run. It has no contact, plasticity, crash simulation or CAD geometry.
+
 ## How it was built
 
 ```
@@ -69,6 +96,7 @@ highD CSV -> extract (cut-ins, signals.npz) -> replay (ACC + AEB, vectorised)
 
 - Every parameter is in `configs/default.toml`.
 - 8 automated tests: replay physics (a cutter in another lane never collides, a close cut-in ahead of a faster follower always does, determinism for a seed), curve fits recovering a known sigmoid, the highD lane numbering, and the variance formulas for stratified sampling.
+- 16 more for the finite element extension: patch test, equilibrium, beam theory, linearity, a stress concentration at the hole, one connected mesh, graph construction, permutation symmetry of the network and learning a tiny dataset.
 - The two sampling studies ran on Kaggle's free CPUs (`kaggle/`); the rest runs in minutes on a laptop.
 - A first version of the efficiency measure compared a plain random sample's variance with an adaptive allocation's variance and showed gains for shuffled strata, because adaptive allocation can be slightly biased. I switched to mean squared error against the true population mean, which is what the numbers above use.
 
@@ -77,6 +105,7 @@ pip install -e .[dev]
 # put the highD CSVs (01_tracks.csv, 01_tracksMeta.csv, 01_recordingMeta.csv, ...) in data/highd/
 python -m cutin.extract && python -m cutin.study_param
 python -m cutin.study_cluster && python -m cutin.study_strata && python -m cutin.figures
+python -m cutin.surrogate.study   # the finite element extension, about 15 minutes on a laptop CPU, needs no highD data
 pytest
 ```
 
